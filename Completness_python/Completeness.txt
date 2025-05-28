@@ -1,0 +1,96 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+
+
+def plot_binary_completeness(file_path, timestamp_col, data_column, sensor_name,
+                             zoom=False, start_minute=None, end_minute=None, threshold=0.0001):
+    """Plot binary data completeness using interval-based logic with improved accuracy."""
+
+    # Load and clean data
+    df = pd.read_excel(file_path, skiprows=2)
+    df.columns = df.columns.str.replace(r'\s+', '', regex=True)
+
+    # Convert to timedelta for time-based resampling
+    df['timestamp'] = pd.to_timedelta(df[timestamp_col], unit='s')
+    df = df[df[timestamp_col].notna()]  # remove invalid timestamps
+
+    # Define what counts as valid data (not NaN, and abs(value) > threshold)
+    def count_valid(x):
+        return ((x.notna()) & (x.abs() > threshold)).sum()
+
+    # Resample every 0.5 seconds
+    resampled = df.resample('500L', on='timestamp').agg({
+        timestamp_col: 'count',
+        data_column: count_valid
+    })
+
+    # Create binary column: 1 if any valid data exists in that interval
+    resampled['data_exists'] = (resampled[data_column] > 0).astype(int)
+    binary_completeness = resampled['data_exists']
+
+    # Time in minutes for x-axis
+    time_minutes = binary_completeness.index.total_seconds() / 60
+
+    # Zoomed view
+    if zoom and start_minute is not None and end_minute is not None:
+        mask = (time_minutes >= start_minute) & (time_minutes <= end_minute)
+        binary_completeness = binary_completeness[mask]
+        time_minutes = time_minutes[mask]
+        zoom_title = f"(Zoomed: {start_minute}-{end_minute} min)"
+    else:
+        zoom_title = "(Full Duration)"
+
+    # Calculate completeness based on binary intervals
+    zoom_completeness = binary_completeness.mean()
+    global_completeness = resampled['data_exists'].mean()  # consistent global completeness
+
+    # Plotting
+    plt.figure(figsize=(10, 4))
+    plt.step(time_minutes, binary_completeness, where='post',
+             color='royalblue', linewidth=1.5)
+
+    # Highlight missing intervals
+    if (binary_completeness == 0).any():
+        missing_mask = binary_completeness == 0
+        plt.fill_between(time_minutes, binary_completeness, 1,
+                         where=missing_mask, color='red', alpha=0.2, step='post')
+
+    # Display completeness in text box
+    plt.text(0.95, 1.1, f'Completeness: {zoom_completeness:.1%}',
+             transform=plt.gca().transAxes, ha='right', va='top',
+             bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'))
+
+    # Legend
+    plt.legend(handles=[
+        mlines.Line2D([], [], color='royalblue',
+                      linewidth=1.5, label='Data Present'),
+        mlines.Line2D([], [], color='red', alpha=0.2,
+                      linewidth=5, label='Missing Data')
+    ])
+
+    # Title and axis
+    plt.title(f'Binary Completeness: {sensor_name} {zoom_title}\nGlobal: {global_completeness:.1%}',
+              pad=30)
+    plt.xlabel('Time (minutes)', labelpad=10)
+    plt.ylabel('Data Exists', labelpad=10)
+    plt.yticks([0, 1], ['No', 'Yes'])
+    plt.ylim(-0.1, 1.1)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.show()
+
+
+# Example usage
+settings = {
+    "file_path": "C:/Users/90552/Desktop/Data/.xls/GS-400 (1).xlsx",
+    "timestamp_col": "s",
+    "data_column": "mm",
+    "sensor_name": "SWA",
+    "zoom": True,
+    "start_minute": 10,
+    "end_minute": 30,
+    "threshold": 0.0001  # Small non-zero to allow flexibility
+}
+
+plot_binary_completeness(**settings)

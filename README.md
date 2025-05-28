@@ -1,2 +1,2 @@
 # SHM
-Data Analysis
+Sensor data analysis

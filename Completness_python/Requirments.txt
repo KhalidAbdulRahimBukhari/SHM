@@ -1,0 +1,10 @@
+# libraries required to be imported to run the programm
+
+import csv 
+
+pip install pandas matplotlib seaborn
+
+import pandas as pd                  # For working with TSV data
+import matplotlib.pyplot as plt      # For plotting
+import seaborn as sns                # Optional: For nicer plot styles
+from datetime import datetime        # For time parsing, if needed
